@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "resource.h"
+#include "ClipboardTextProcessor.h"
 
 using namespace System;
 using namespace System::Drawing;
@@ -152,6 +153,7 @@ private:
     ToolStripMenuItem^ removeUtmParametersItem;
     bool trayMenuThemeInitialized;
     bool trayMenuUsesDarkTheme;
+    Timer^ clipboardUpdateTimer;
 
 public:
     Form1()
@@ -169,7 +171,12 @@ public:
         removeUtmParametersItem = nullptr;
         trayMenuThemeInitialized = false;
         trayMenuUsesDarkTheme = false;
+        clipboardUpdateTimer = nullptr;
         InitializeComponent();
+        clipboardUpdateTimer = gcnew Timer();
+        clipboardUpdateTimer->Interval = 50;
+        clipboardUpdateTimer->Tick += gcnew EventHandler(
+            this, &Form1::OnClipboardUpdateTimerTick);
         hwnd = static_cast<HWND>(this->Handle.ToPointer());
     }
 
@@ -207,6 +214,13 @@ protected:
 
     virtual void OnFormClosed(FormClosedEventArgs^ e) override
     {
+        if (clipboardUpdateTimer != nullptr)
+        {
+            clipboardUpdateTimer->Stop();
+            delete clipboardUpdateTimer;
+            clipboardUpdateTimer = nullptr;
+        }
+
         if (trayIcon != nullptr)
         {
             trayIcon->Visible = false;
@@ -277,7 +291,8 @@ protected:
     {
         if (m.Msg == WM_CLIPBOARDUPDATE)
         {
-            ProcessClipboardUpdate();
+            clipboardUpdateTimer->Stop();
+            clipboardUpdateTimer->Start();
             return;
         }
 
@@ -511,11 +526,17 @@ private:
                 return;
             }
 
-            String^ replacementText = clipboardText;
-            bool utmParametersRemoved =
-                removeUtmParametersItem->Checked &&
-                TryRemoveUtmParameters(clipboardText, replacementText);
-            if (!convertClipboardTextItem->Checked && !utmParametersRemoved)
+            String^ replacementText = nullptr;
+            bool replacementRequired = false;
+            bool utmParametersRemoved = false;
+            ClipboardTextProcessor::Process(
+                clipboardText,
+                convertClipboardTextItem->Checked,
+                removeUtmParametersItem->Checked,
+                replacementText,
+                replacementRequired,
+                utmParametersRemoved);
+            if (!replacementRequired)
             {
                 return;
             }
@@ -571,81 +592,10 @@ private:
         }
     }
 
-    bool TryRemoveUtmParameters(String^ text, String^% cleanedText)
+    void OnClipboardUpdateTimerTick(Object^, EventArgs^)
     {
-        cleanedText = text;
-        String^ candidate = text->Trim();
-        if (candidate->Length == 0 ||
-            !Uri::IsWellFormedUriString(candidate, UriKind::Absolute))
-        {
-            return false;
-        }
-
-        Uri^ parsedUri = nullptr;
-        if (!Uri::TryCreate(candidate, UriKind::Absolute, parsedUri) ||
-            (!String::Equals(
-                parsedUri->Scheme, Uri::UriSchemeHttp, StringComparison::OrdinalIgnoreCase) &&
-             !String::Equals(
-                parsedUri->Scheme, Uri::UriSchemeHttps, StringComparison::OrdinalIgnoreCase)))
-        {
-            return false;
-        }
-
-        int queryStart = candidate->IndexOf('?');
-        int fragmentStart = candidate->IndexOf('#');
-        if (queryStart < 0 ||
-            (fragmentStart >= 0 && queryStart > fragmentStart))
-        {
-            return false;
-        }
-
-        int queryEnd = fragmentStart >= 0 ? fragmentStart : candidate->Length;
-        String^ query = candidate->Substring(queryStart + 1, queryEnd - queryStart - 1);
-        array<String^>^ parameters = query->Split('&');
-        System::Collections::Generic::List<String^>^ retainedParameters =
-            gcnew System::Collections::Generic::List<String^>();
-        bool removedAny = false;
-
-        for each (String^ parameter in parameters)
-        {
-            int valueSeparator = parameter->IndexOf('=');
-            String^ name = valueSeparator < 0
-                ? parameter
-                : parameter->Substring(0, valueSeparator);
-            String^ decodedName = Uri::UnescapeDataString(name);
-            if (decodedName->StartsWith("utm_", StringComparison::OrdinalIgnoreCase))
-            {
-                removedAny = true;
-            }
-            else
-            {
-                retainedParameters->Add(parameter);
-            }
-        }
-
-        if (!removedAny)
-        {
-            return false;
-        }
-
-        int leadingWhitespaceLength = text->Length - text->TrimStart()->Length;
-        int trailingWhitespaceLength = text->Length - text->TrimEnd()->Length;
-        String^ leadingWhitespace = text->Substring(0, leadingWhitespaceLength);
-        String^ trailingWhitespace = text->Substring(
-            text->Length - trailingWhitespaceLength, trailingWhitespaceLength);
-        String^ queryPrefix = retainedParameters->Count > 0
-            ? "?" + String::Join("&", retainedParameters->ToArray())
-            : String::Empty;
-        String^ fragment = fragmentStart >= 0
-            ? candidate->Substring(fragmentStart)
-            : String::Empty;
-
-        cleanedText = leadingWhitespace +
-            candidate->Substring(0, queryStart) +
-            queryPrefix +
-            fragment +
-            trailingWhitespace;
-        return true;
+        clipboardUpdateTimer->Stop();
+        ProcessClipboardUpdate();
     }
 
     bool TryCopyClipboardImageAsFile()

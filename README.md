@@ -32,3 +32,9 @@ Build and debug:
 - Use the "ClipBird (MSVC)" launch configuration to build and debug.
 - These configurations require Visual Studio Build Tools 2022, the MSVC C++
   toolchain, the .NET Framework 4.8 targeting libraries, and the Windows SDK.
+
+Tests:
+- Run the "MSVC: Test ClipBird" task for URL-cleanup unit tests, processing
+  policy tests, and Windows clipboard/image lifecycle integration tests.
+- The integration tests temporarily replace and then restore the current
+  clipboard. Close all running ClipBird instances before starting the test task.

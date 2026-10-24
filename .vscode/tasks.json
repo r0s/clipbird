@@ -18,6 +18,22 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "MSVC: Test ClipBird",
+            "type": "process",
+            "command": "C:\\Windows\\System32\\cmd.exe",
+            "args": [
+                "/d",
+                "/c",
+                "call \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\" >nul && cl /nologo /clr /FU\"%WINDIR%\\Microsoft.NET\\Framework64\\v4.0.30319\\System.dll\" /FU\"%WINDIR%\\Microsoft.NET\\Framework64\\v4.0.30319\\System.Windows.Forms.dll\" /FU\"%WINDIR%\\Microsoft.NET\\Framework64\\v4.0.30319\\System.Drawing.dll\" \"${workspaceFolder}\\ClipboardTests.cpp\" /Fe\"${workspaceFolder}\\ClipBird.Tests.exe\" /link /SUBSYSTEM:CONSOLE user32.lib && \"${workspaceFolder}\\ClipBird.Tests.exe\""
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": "$msCompile",
+            "dependsOn": "MSVC: Build ClipBird",
+            "dependsOrder": "sequence"
         }
     ]
 }
